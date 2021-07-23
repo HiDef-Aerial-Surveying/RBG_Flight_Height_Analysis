@@ -95,6 +95,13 @@ obsout <- data.table::rbindlist(lapply(olist,function(x){
 
 # Get Lat Lons ------------------------------------------------------------
 
+#Problem filtering datout due to duplicate reflection columns. Worth knowing for future...
+#names(datout)
+#datout[,67] <- as.factor(datout[,67])
+#summary(datout[,29])
+#summary(datout[,67])
+datout <- datout[,-67]
+
 SppDat <- datout %>% dplyr::filter(Species == SPP,)
 ObsDat <- obsout %>% dplyr::filter(Species == SPP,)
 
@@ -108,7 +115,7 @@ SppDat$Longitude <- ObsDat$Longitude
 
 ## Gets the birds lengths and puts them into a dataframe for inputting into the flight height calcs
 ## This is where you might want to check how many 
-#SppDat <- SppDat %>% dplyr::filter(Reflection %in% c(NA, "No"))
+SppDat <- SppDat %>% dplyr::filter(Reflection %in% c(NA, "No"))
 SppDat <- get.lengths(SppDat)
 
 
@@ -117,7 +124,7 @@ SppDat <- get.lengths(SppDat)
 ## Running this should calculate flight heights for the species of interest
 ## This process can take a while depending on how many birds need to be done
 
-fhdata <- get.fhs(SppDat,Dat.reflect,bootsize = 10)
+fhdata <- get.fhs(SppDat,Dat.reflect,bootsize = 1000)
 
 
 
@@ -127,6 +134,8 @@ fhdata <- get.fhs(SppDat,Dat.reflect,bootsize = 10)
 
 ### Generates the FH distribution plot
 Dat.plot <- plot.fhs(SPP,fhdata,turbine.low,turbine.high)
+Dat.plot
+
 
 SppDat$low.height <- fhdata$lwheight
 SppDat$mid.height <- fhdata$mdheight

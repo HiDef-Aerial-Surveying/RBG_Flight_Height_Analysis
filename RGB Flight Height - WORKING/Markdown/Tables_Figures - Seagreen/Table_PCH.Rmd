@@ -1,0 +1,72 @@
+---
+title: "PCH table"
+author: "Katharine Keogan"
+date: "06/04/2021"
+---
+
+```{r PCH table, warning = FALSE, echo = FALSE, message = FALSE, results = "asis"}
+std <- function(x) sd(x)/sqrt(length(x))
+
+i_sp <- gsub(" ", "_", i)
+
+for(j in 1:2){
+ for(k in 1:2){
+
+
+print(all.frame %>% filter(Species == i, yr == yrs[k], loc == locs[j]) %>% nest(data=c(out)) %>%
+  mutate(
+    ss = map_dbl(data, ~length(.x$out)),
+    mn = map_dbl(data, ~mean(.x$out)),
+    CIs = map_dbl(data, ~std(.x$out)*1.96), 
+    mdn = map_dbl(data, ~median(.x$out)),
+    IQR25 = map_dbl(data, ~quantile(.x$out, 0.25, na.rm = TRUE)),
+    IQR75 = map_dbl(data, ~quantile(.x$out, 0.75, na.rm = TRUE)),
+    pchS = map_dbl(data,~length(which(.x$out > turbine.low & .x$out < turbine.high))/length(.x$out)),
+    pchL = map_dbl(data,~length(which(.x$out > turbine.low & .x$out < turbine.max))/length(.x$out)),
+  ) %>% group_by(yr,month,category) %>% 
+  summarise(ss = ss, 
+            mn = round(mn, 1), 
+            CI = paste("(", round(mn-CIs, digits = 1),"-", round(mn+CIs, digits = 1),")", sep = ""), 
+            #mdn = round(mdn, 1),
+            IQR = paste(round(IQR25, digits = 1), "-", round(IQR75, digits = 1), sep = ""),
+            PCHsmall = round(mean(pchS)*100, 1),
+            PCHlarge = round(mean(pchL)*100)) %>% 
+  
+  # Making the table
+  flextable() %>% 
+  
+  # editing header, including column names
+    add_header_row(colwidths = c(7, 2),
+  values = c("", "Proportion of birds at PCH\n (%)")) %>%
+  bold(i = 1:2, part = "header") %>% 
+  bg(i = 1:2, part = "header", bg = "grey") %>%
+  set_header_labels(month = "Month",
+                    yr = "Year",
+                    category = "Scenario",
+                    ss = "Sample Size\n (n)",
+                    mn = "Mean bootstrapped\n height estimate\n (m)",
+                    CI = "+/- 95% CI",
+                    IQR = "Inter-quartile\n range",
+                    PCHsmall = paste0("Small Scenario\n (",turbine.low," - ",turbine.high,"m)"),
+                    PCHlarge = paste0("Large scenario\n (",turbine.low," - ",turbine.max,"m)")) %>%
+  
+  # sorting out alignment and font size
+  align(align = "center", part = "all") %>%
+  fontsize(size = 10.5, part = "body") %>%
+  set_table_properties(layout = "autofit") %>%
+  merge_v(j = ~ month + ss) %>%
+  
+  # sorting out the border
+  border_outer(part="all", border = fp_border(color="black", width = 1.5)) %>% 
+  border_inner_h(part="all", border = fp_border(color="gray", width = 1)) %>% 
+  border_inner_v(part="all", border = fp_border(color="gray", width = 1)) %>%
+  fix_border_issues(part = "all") %>%
+  
+  # caption
+  set_caption(caption = paste0("Mean height and proportion (%) of ", i, " at PCH in ", k, "at site ", j, ". For flight heights both the mean and the interquartile range (IQR), i.e. the middle 50% of the data, are reported for each of the bootstrapped flight height scenarios."), 
+                      style = "Table Caption",
+                      autonum = run_autonum(seq_id = "tab", bkm = paste0("pch_",i_sp))))
+   
+ }
+}
+```

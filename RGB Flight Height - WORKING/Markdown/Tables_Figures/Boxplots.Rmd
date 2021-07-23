@@ -1,0 +1,43 @@
+---
+title: "Boxplots"
+author: "Katharine Keogan"
+date: "06/04/2021"
+---
+
+```{r boxplot, warnings = FALSE, echo = FALSE, message = FALSE, results = 'asis', fig.height = 4.5, fig.width = 10}
+
+i_sp <- gsub(" ", "_", i)
+
+ for(k in 1:2){
+
+   if(dim(all.frame %>% filter(Species == i, yr == yrs[k]) %>% droplevels())[1] == 0){print(paste("No data for", yrs[k], sep = " "))}else{
+     
+        mainboxplot <- all.frame %>% filter(Species == i, yr == yrs[k]) %>%
+       ggplot() +
+        geom_boxplot(aes(x=category,y=out, fill = mon.var), width=0.5,position= position_dodge(width=1))+
+        geom_hline(yintercept=turbine.low,linetype="dashed",size=1)+
+        geom_hline(yintercept=turbine.high,linetype="dashed",size=1)+
+        geom_hline(yintercept=turbine.max,linetype="dashed",size=1)+
+        stat_summary(aes(x=category,y=out,group=Species),
+                     fun=mean, geom="point", shape=18, size=3.5, color="black",position= position_dodge(width=1))+
+        scale_fill_manual(values= c("grey60", "grey60","grey60", "grey60","grey60", "grey60","grey60", "grey60", "grey60", "grey60", "grey60", "grey60", "grey60", "grey60", "grey60", "grey60", "grey60", "grey60"))+
+        ggthemes::theme_gdocs()+
+        ylab("Height (m)")+xlab("")+
+        facet_wrap(mon.var ~ ., ncol = 4, nrow = 5, drop = FALSE) +
+        theme(
+          panel.border = element_blank(),
+          legend.position = "none",
+          strip.text.x = element_text(size = 12, face = "bold", colour = "black")
+        )
+      
+      print(mainboxplot)
+      
+        fig_num <-  run_autonum(seq_id = "Figure", pre_label = "Figure ", bkm = paste0("mainboxplot_", i_sp, k))
+        
+      cat(knit_print(block_caption(label = paste0("Distribution of ", i, " flight heights from minimum (2.5th percentile), mean and maximum (97.5th percentile) bootstrapped estimates in year ", k, ". The mean of the population for each distribution is indicated by the black dot, and the middle line represents the median. The grey boxes represent the middle 50% of the data. The dotted lines indicate the minimum and maximum rotor heights of both wind turbine scenarios."), 
+                      style = "caption", autonum = fig_num)))
+   }
+   
+ }
+
+```

@@ -1,0 +1,335 @@
+---
+title:
+author:
+output:
+  officedown::rdocx_document:
+    reference_docx: report_template.docx
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow")
+```
+
+```{r source, warning = FALSE, include = FALSE}
+source("Code/helper.scripts/Bootstrap_method_helpers_KK.R", local = knitr::knit_global())
+source("Code/config.R", local = knitr::knit_global())
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+```{r packages, warning = FALSE, include = FALSE}
+lib_list <- c("readxl","foreach","gridExtra","ggpubr","rayshader","viridis","raster",
+              "gstat","rgdal","sp","spatialEco","HTSSIP","hablar",
+              "data.table","tidyverse","boot","GPArotation","psych","cowplot",
+              "pander", "flextable", "officer", "officedown")
+
+
+Load_Libs(lib_list)
+```
+
+```{r speclist, warning = FALSE, include = FALSE}
+SPP <- tolower(c("Arctic skua", "Arctic tern", "common gull", "common tern", "fulmar", "gannet", "great black-backed gull", "great skua", "herring gull", "kittiwake", "lesser black-backed gull", "little gull", "Manx shearwater", "pomarine skua", "red-throated diver", "sandwich tern", "sooty shearwater"))
+```
+
+```{r import data, warning = FALSE, include = FALSE}
+# bootstrapped flight heights
+reflist <- list.files("Code/outputs/SppDat", full.names = TRUE)
+
+SppDat <- data.table::rbindlist(lapply(reflist,function(x) readxl::read_xlsx(x,sheet="Sheet1")),
+                      use.names=TRUE,fill=TRUE)
+
+SppDat <- SppDat[order(SppDat$`Survey Date`),]
+
+SppDat$month <- factor(SppDat$month, levels = c("March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"))
+
+# This creates column to split between years 1 and 2 if needed. 
+SppDat$yr <- "Year 1"
+
+SppDat$yr[as.Date(SppDat$`Survey Date`) %!in% Date1:Date2] <- "Year 2"
+```
+
+```{r import measure data, warning = FALSE, include = FALSE}
+# all data
+measurelist <- list.files("Code/outputs/MeasureDat", full.names = TRUE)
+
+MeasureDat <- rbindlist(lapply(measurelist, function(x) readxl::read_xlsx(x,sheet = "Sheet1")),
+                        use.names = TRUE, fill = TRUE)
+
+MeasureDat <- MeasureDat[order(MeasureDat$`Survey Date`),]
+
+# This creates column to split between years 1 and 2 if needed. 
+MeasureDat$yr <- "Year 1"
+
+MeasureDat$yr[as.Date(MeasureDat$`Survey Date`) %!in% Date1:Date2] <- "Year 2"
+
+load(file = "Code/outputs/reflectcount")
+```
+
+```{r shapefile, warning = FALSE, include = FALSE}
+shapearea <- raster::shapefile(boundary.shapefile)
+shapearea <- spTransform(shapearea,WGS84)
+shapefileDF <- fortify(shapearea)
+e <- extent(shapearea)
+# coerce to a SpatialPolygons object
+p <- as(e, 'SpatialPolygons')  
+proj4string(p) <- sf::st_crs(4326)$proj4string
+```
+
+```{r wide to long format, warning = FALSE, include = FALSE}
+all.frame <- SppDat %>% dplyr::select(Species,lwheight,mdheight,hiheight,month, year, yr)
+
+## Gathers the frame into LONG format for plotting
+all.frame <- gather(all.frame,category,out,lwheight:hiheight)
+all.frame$category <- plyr::revalue(all.frame$category,c("lwheight"="Low",
+                                                         "mdheight"="Mean",
+                                                         'hiheight'="High"))
+
+all.frame$category <- factor(all.frame$category, levels=c("Low","Mean","High"))
+
+all.frame$yr <- factor(all.frame$yr, levels = c("Year 1", "Year 2"))
+
+all.frame$month <- factor(all.frame$month, levels = c("March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"))
+```
+
+\allsectionsfont{\centering}
+\subsectionfont{\raggedright}
+\subsubsectionfont{\raggedright}
+
+<!-- This will make up the first page -->
+<!-- The vspace function will say how much space to leave from the previous entry -->
+<!-- In this case vspace of 3cm means 3cm from the top of the page.  -->
+
+Digital video aerial surveys of seabirds at Seagreen 2 & 3:
+
+March 2019 to February 2021
+
+Flight height analysis
+
+\newpage
+
+# Executive Summary
+
+In February 2019, Innogy commissioned HiDef Aerial Surveying Limited (‘HiDef’) to undertake a programme of high-resolution digital video aerial surveys of marine megafauna, ornithological and human activity in support of the development proposals for the proposed Greater Gabbard wind farm extensions. 
+
+The Greater Gabbard wind farm is located approximately 23 km east of the Suffolk coast in the southern North Sea.
+
+Monthly surveys were flown from March 2019 to February 2021, giving 24 surveys in total. HiDef designed a survey that placed transects at 2.5km apart across the survey area, including a 4km buffer around the proposed extension site (‘the survey area’).
+
+The HiDef surveys were undertaken using an aircraft equipped with four (4) HiDef Gen II cameras with sensors set to a resolution of 2 centimetres (‘cm’) Ground Sample Distance (‘GSD’). Each camera sampled a strip of 125m width, separated from the next camera by ~25m, which provides a combined sampled width of 500m within a 575m overall strip. However, to ensure that sufficient footage is available to allow either a design-based or model-based analysis, footage from only two (2) of the four (4) cameras was analysed. The remaining footage has been archived. Surveys were successful in characterising the bird and mammal species present across the survey area, recording a total 45,332 birds of 18 species and 135 marine mammals of two species over two months. 
+
+This report presents the results from flight height analysis undertaken for three key species in the survey area: kittiwake Rissa tridactyla, lesser black-backed gull Larus fuscus and herring gull Larus argentatus.
+
+Analysis was conducted on a wind turbine scenario with a rotor swept area of between 60m and 390m above Mean High Water Springs (MHWS). Based on the estimated mean flight heights of seabirds:
+
+\newpage
+
+
+# Introduction
+
+Innogy operates the Greater Gabbard offshore wind farms with SSE as the leading developer. The wind farm is located off the English Suffolk coast and is 23km from the shore with 140 operational wind turbines. It is located close to its sister project of the Galloper Wind Farm.
+
+In February 2019, Innogy commissioned HiDef Aerial Surveying Limited (‘HiDef’) to undertake a programme of high-resolution digital video aerial surveys of marine megafauna, ornithological and human activity in support of the development proposals for the proposed Greater Gabbard wind farm extensions.
+
+HiDef designed the survey methodology to provide information suitable to make an accurate assessment of abundance and distribution of seabirds and marine mammals in order to enable an environmental impact assessment of the Greater Gabbard project. Surveys were conducted across both the Greater Gabbard extension proposed array area and a surrounding 16km buffer (hereafter ‘the survey area’).
+
+A number of important bird sites which have been classified as Special Protection Areas (‘SPA’) under the European Council (‘EC’) Directive 2009/147/EC on the Conservation of Wild Birds (‘the Birds Directive’) are in the vicinity of the survey area. Alde-Ore Estuary SPA lies to the north west of the development site and is important for avocet Recurvirostra avosetta, redshank Tringa totanus, ruff Calidris pugnax and Sandwich tern Sterna sandvicensis. It is important both as a feeding and breeding area. The saltmarsh within the SPA is also important for nesting lesser black-backed gulls Larus fuscus. The latter has been flagged by nature conservation bodies as the main concern in relation to Greater Gabbard.
+
+The Outer Thames SPA to the west of the survey area is designated for non-breeding red-throated diver Gavia stellata and is also in close proximity to the Greater Gabbard offshore wind farm. The site is also important for breeding common tern Sterna hirundo and little tern Sternula albifrons in summer.
+
+Of these species, focus will particularly be upon lesser black-backed gulls, as with the previous studies of the project area and the neighbouring Galloper site. Concerns have also been highlighted regarding the potential displacement of guillemots Uria aalge and razorbills Alca torda at sea. Other migratory and transient bird species are also known to occur in the area, requiring year-round surveys to be carried to characterise their abundance.
+
+In addition to assessing seabird abundance and distribution, flight height estimates are also required for species most at risk of collision with turbines.
+
+Offshore windfarm developers undertake collision risk modelling (CRM) as part of their Environmental Impact Assessment (EIA). The impact assessment is likely to use the Band (2012) offshore CRM, or the stochastic version of this (McGregor et al. 2018). The offshore CRM has four options, with each differing in the use of flight height information. Option 1 uses site-based flight height information, but only uses the proportion of birds in flight as the input parameter. Option 2 similarly uses the proportion of birds in flight as the input parameter, but unlike Option 1 the data are derived from published generic flight height information (Johnston et al. 2014) rather than site-based information. Option 3 also uses generic flight heights, but unlike Options 1 and 2, it uses the distribution of the modelled flight height from Johnston et al. (2014). Option 4 (which is rarely, if ever, used) is similar to Option 3, but uses site-based flight height distribution data. 
+
+In most cases, consents of offshore wind farms in the UK have been supported by assessments using Option 2 and/or Option 3 results. Option 1 results have been mostly used as additional information and only used to provide context to the Option 2 and 3 results. 
+
+Site-based proportions of birds in flight at collision risk height can be derived from HiDef imagery using a size-based method, and this is suitable for Option 1 CRM for some species. 
+
+This report provides the results from size-based flight height analysis conducted for three key species using combined data from the 24 surveys undertaken between March 2019 and February 2021. This is a supplementary report and should be viewed in tandem with ‘the two-year report’ (‘HP00101-703-01). 
+
+\nextpage
+
+# Results
+
+## Survey effort
+
+## Flying birds
+
+  The total number of flying birds measured within the survey area and those taken forward for flight height estimation are presented in Tables `r run_reference("m_v_e_kittiwake")`, `r run_reference("m_v_e_gannet")` and `r run_reference("m_v_e_lesser_black-backed_gull")`. A minimum number of 25 reflections is deemed suitable to run flight height analysis. The current sample size of reflection data for each equivalent species is presented alongside. 
+Any differences in the total number of birds measured and those presented in results will be due to removal of outlier values during the analysis process. 
+
+```{r kitti, include = FALSE}
+i <- "kittiwake"
+```
+
+```{r kitti table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r gan, include = FALSE}
+i <- "gannet"
+```
+
+```{r gannet table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r lbbg, include = FALSE}
+i <- "lesser black-backed gull"
+```
+
+```{r lbbg table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r gbbg, include = FALSE}
+i <- "great black-backed gull"
+```
+
+```{r gbbg table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r hg, include = FALSE}
+i <- "herring gull"
+```
+
+```{r lbbg table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+## Flight Height
+
+  Estimates of mean flight height for the minimum, mean and maximum flight height scenarios are presented for each species in Tables `r run_reference("pch_kittiwake")` - `r run_reference("pch_lesser_black-backed_gull")`. The estimate of the proportion of birds at PCH for each scenario is based on the number of individual birds whose mean flight height fell within the rotor swept area.
+
+  The distribution of these heights are presented as box plots for each species in Figures `r run_reference("mainboxplot_kittiwake")`, `r run_reference("mainboxplot_gannet")` and `r run_reference("mainboxplot_lesser_black-backed_gull")`. The grey boxes represent the middle 50% of the estimated flight heights for each scenario, and the mean of the population is indicated by the black dot. The distributions of flight height are also represented in ordered dot plots in Figures `r run_reference("Datplot_kittiwake")`, `r run_reference("Datplot_gannet")` and `r run_reference("Datplot_lesser_black-backed_gull")`.
+
+  The spatial variation in flight heights are represented in Figures X.
+
+  All but one of the mean heights for either of the two species ranged below `r turbine.high`m (the maximum rotor height of the smallest turbine specification). As such, the estimated proportions of birds at PCH for the smallest and largest wind turbine scenarios are identical with the exception of the maximum July flight height for gannets.
+
+<!---BLOCK_LANDSCAPE_START--->
+### Kittiwake
+```{r k, include = FALSE}
+i <- "kittiwake"
+```
+#### Proportion of birds at PCH
+```{r kitti pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+ 
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r kitti_boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r kitti blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+```{r kitti spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+<!---BLOCK_LANDSCAPE_STOP--->
+
+
+
+<!---BLOCK_LANDSCAPE_START--->
+### Gannet
+```{r g, include = FALSE}
+i <- "gannet"
+```
+#### Proportion of birds at PCH
+```{r gannet pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r gannet boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r gannet blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+```{r gannet spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+<!---BLOCK_LANDSCAPE_STOP--->
+
+
+<!---BLOCK_LANDSCAPE_START--->
+### Lesser black-backed gull
+```{r l, include = FALSE}
+i <- "lesser black-backed gull"
+```
+#### Proportion of birds at PCH
+```{r lbbg pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+
+
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r lbbg boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r lbbg blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+```{r lbbg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+<!---BLOCK_LANDSCAPE_STOP--->
+
+<!---BLOCK_LANDSCAPE_START--->
+
+### Great black-backed gull
+```{r gb, include = FALSE}
+i <- "great black-backed gull"
+```
+#### Proportion of birds at PCH
+```{r gbbg pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r gbbg boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r gbbg blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+```{r gbbg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+<!---BLOCK_LANDSCAPE_STOP--->
+
+<!---BLOCK_LANDSCAPE_START--->
+
+### Herring gull
+
+```{r h, include = FALSE}
+i <- "herring gull"
+```
+#### Proportion of birds at PCH
+```{r herring pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r herring boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r herring blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+```{r hg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+<!---BLOCK_LANDSCAPE_STOP--->

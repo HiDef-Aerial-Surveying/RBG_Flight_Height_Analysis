@@ -1,0 +1,170 @@
+---
+title:
+author:
+output:
+  officedown::rdocx_document:
+    reference_docx: report_template.docx
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow")
+```
+
+```{r source, warning = FALSE, include = FALSE}
+source("Code/helper.scripts/Bootstrap_method_helpers_KK.R", local = knitr::knit_global())
+source("Code/config.R", local = knitr::knit_global())
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+```{r packages, warning = FALSE, include = FALSE}
+lib_list <- c("readxl","foreach","gridExtra","ggpubr","rayshader","viridis","raster",
+              "gstat","rgdal","sp","spatialEco","HTSSIP","hablar",
+              "data.table","tidyverse","boot","GPArotation","psych","cowplot",
+              "pander", "flextable", "officer", "officedown", "knitr")
+
+
+Load_Libs(lib_list)
+```
+
+```{r speclist, warning = FALSE, include = FALSE}
+SPP <- tolower(c("Arctic skua", "Arctic tern", "common gull", "common tern", "fulmar", "gannet", "great black-backed gull", "great skua", "herring gull", "kittiwake", "lesser black-backed gull", "little gull", "Manx shearwater", "pomarine skua", "red-throated diver", "sandwich tern", "sooty shearwater"))
+```
+
+```{r import data, warning = FALSE, include = FALSE}
+# bootstrapped flight heights
+reflist <- list.files("Code/outputs/SppDat", full.names = TRUE)
+
+SppDat <- data.table::rbindlist(lapply(reflist,function(x) readxl::read_xlsx(x,sheet="Sheet1")),
+                      use.names=TRUE,fill=TRUE)
+
+SppDat <- SppDat[order(SppDat$`Survey Date`),]
+
+SppDat$month <- factor(SppDat$month, levels = c("March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"))
+
+# This creates column to split between years 1 and 2 if needed. 
+SppDat$yr <- "Year 1"
+
+SppDat$yr[as.Date(SppDat$`Survey Date`) %!in% Date1:Date2] <- "Year 2"
+```
+
+```{r import measure data, warning = FALSE, include = FALSE}
+# all data
+measurelist <- list.files("Code/outputs/MeasureDat", full.names = TRUE)
+
+MeasureDat <- rbindlist(lapply(measurelist, function(x) readxl::read_xlsx(x,sheet = "Sheet1")),
+                        use.names = TRUE, fill = TRUE)
+
+MeasureDat <- MeasureDat[order(MeasureDat$`Survey Date`),]
+
+# This creates column to split between years 1 and 2 if needed. 
+MeasureDat$yr <- "Year 1"
+
+MeasureDat$yr[as.Date(MeasureDat$`Survey Date`) %!in% Date1:Date2] <- "Year 2"
+
+load(file = "Code/outputs/reflectcount")
+```
+
+```{r shapefile, warning = FALSE, include = FALSE}
+# shapearea <- raster::shapefile(boundary.shapefile)
+# shapearea <- spTransform(shapearea,WGS84)
+# shapefileDF <- fortify(shapearea)
+# e <- extent(shapearea)
+# # coerce to a SpatialPolygons object
+# p <- as(e, 'SpatialPolygons')  
+# proj4string(p) <- sf::st_crs(4326)$proj4string
+
+shapearea2 <- raster::shapefile(boundary.2)
+shapearea2 <- spTransform(shapearea2,WGS84)
+shapefile2DF <- fortify(shapearea2)
+e2 <- extent(shapearea2)
+# coerce to a SpatialPolygons object
+p2 <- as(e2, 'SpatialPolygons')  
+proj4string(p2) <- sf::st_crs(4326)$proj4string
+
+shapearea3 <- raster::shapefile(boundary.3)
+shapearea3 <- spTransform(shapearea3,WGS84)
+shapefile3DF <- fortify(shapearea3)
+e3 <- extent(shapearea3)
+# coerce to a SpatialPolygons object
+p3 <- as(e3, 'SpatialPolygons')  
+proj4string(p3) <- sf::st_crs(4326)$proj4string
+```
+
+```{r wide to long format, warning = FALSE, include = FALSE}
+all.frame <- SppDat %>% dplyr::select(Species,lwheight,mdheight,hiheight,month, year, yr, loc)
+
+## Gathers the frame into LONG format for plotting
+all.frame <- gather(all.frame,category,out,lwheight:hiheight)
+all.frame$category <- plyr::revalue(all.frame$category,c("lwheight"="Low",
+                                                         "mdheight"="Mean",
+                                                         'hiheight'="High"))
+
+all.frame$category <- factor(all.frame$category, levels=c("Low","Mean","High"))
+
+all.frame$yr <- factor(all.frame$yr, levels = c("Year 1", "Year 2"))
+
+all.frame$month <- factor(all.frame$month, levels = c("March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"))
+```
+
+```{r for loops, warning = FALSE, include = FALSE}
+yrs <- c("Year 1", "Year 2")
+locs <- c("SG2", "SG3")
+```
+
+\allsectionsfont{\centering}
+\subsectionfont{\raggedright}
+\subsubsectionfont{\raggedright}
+
+<!-- This will make up the first page -->
+<!-- The vspace function will say how much space to leave from the previous entry -->
+<!-- In this case vspace of 3cm means 3cm from the top of the page.  -->
+
+Digital video aerial surveys of seabirds at Seagreen 2 & 3:
+
+March 2019 to February 2021
+
+Flight height analysis
+
+\nextpage
+
+# Results
+
+## Flight Height
+
+  Estimates of mean flight height for the minimum, mean and maximum flight height scenarios are presented for each species in Tables `r run_reference("pch_kittiwake")` - `r run_reference("pch_lesser_black-backed_gull")`. The estimate of the proportion of birds at PCH for each scenario is based on the number of individual birds whose mean flight height fell within the rotor swept area.
+
+  The distribution of these heights are presented as box plots for each species in Figures `r run_reference("mainboxplot_kittiwake")`, `r run_reference("mainboxplot_gannet")` and `r run_reference("mainboxplot_lesser_black-backed_gull")`. The grey boxes represent the middle 50% of the estimated flight heights for each scenario, and the mean of the population is indicated by the black dot. The distributions of flight height are also represented in ordered dot plots in Figures `r run_reference("Datplot_kittiwake")`, `r run_reference("Datplot_gannet")` and `r run_reference("Datplot_lesser_black-backed_gull")`.
+
+  The spatial variation in flight heights are represented in Figures X.
+
+  All but one of the mean heights for either of the two species ranged below `r turbine.high`m (the maximum rotor height of the smallest turbine specification). As such, the estimated proportions of birds at PCH for the smallest and largest wind turbine scenarios are identical with the exception of the maximum July flight height for gannets.
+
+<!---BLOCK_LANDSCAPE_START--->
+### Kittiwake
+```{r k, include = FALSE}
+i <- "kittiwake"
+```
+#### Flight height ranges
+ 
+  For interpretation of the following graphs, see Section 3.2. 
+
+
+```{r kitti_boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r kitti blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+
+```{r k12, include = FALSE}
+j <- 1
+k <- 1
+shapefileDF <- shapefile2DF
+p <- p2
+shapearea <- shapearea2
+```
+
+```{r kitti blueplot_test, child = "Tables_Figures/Blue_plot_test.Rmd", warning = FALSE}
+```

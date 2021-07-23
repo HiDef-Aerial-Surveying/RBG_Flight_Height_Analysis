@@ -1,0 +1,27 @@
+---
+title: "blue_plot"
+author: "Katharine Keogan"
+date: "07/04/2021"
+---
+
+```{r blueplot, warning = FALSE, echo = FALSE, message = FALSE, results = 'asis', fig.height = 4.5, fig.width = 10}
+# Code for blue plots -----------------------------------------------------
+
+ for(k in 1:2){
+
+   if(dim(SppDat %>% filter(Species == i, yr == yrs[k]) %>% droplevels())[1] == 0){print(paste("No data for", yrs[k], sep = " "))}else{
+   
+SppDatSPP <- SppDat %>% filter(Species == i, yr == yrs[k])
+
+Dat.plot <- plot.fhs(fhdata = SppDatSPP,turbine.low = turbine.low,turbine.high = turbine.high,turbine.max = turbine.max)
+print(Dat.plot)
+
+fig_num <-  run_autonum(seq_id = "Figure", pre_label = "Figure ", bkm = paste0("Datplot_", i_sp, k))
+  
+ cat(knit_print(block_caption(label = paste0("Ordered height estimates of individual ", i, " in the survey area with minimum and maximum potential height range for both smallest and largest turbine specifications in year", k, "."), 
+                style = "caption", autonum = fig_num)))
+
+   }
+   }
+  
+```

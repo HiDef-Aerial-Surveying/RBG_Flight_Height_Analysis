@@ -1,0 +1,30 @@
+---
+title: "mean_boxplot"
+author: "Katharine Keogan"
+date: "07/04/2021"
+---
+
+```{r meanbox, echo = FALSE, warning = FALSE, message = FALSE}
+
+i_sp <- gsub(" ", "_", i)
+
+meanboxtest <- all.frame %>% filter(Species == i, category == "Mean") %>%
+  ggplot() +
+  geom_boxplot(aes(x=month,y=out),fill = "grey60", width=0.5,position= position_dodge(width=1))+
+  geom_hline(yintercept=turbine.low,linetype="dashed",size=1)+
+  geom_hline(yintercept=turbine.high,linetype="dashed",size=1)+
+  geom_hline(yintercept=turbine.max,linetype="dashed",size=1)+
+  stat_summary(aes(x=month,y=out),
+               fun=mean, geom="point", shape=18, size=3.5, color="black",position= position_dodge(width=1))+
+  ggthemes::theme_gdocs()+
+  ylab("Height (m)")+xlab("")+
+  theme(
+    panel.border = element_blank(),
+    legend.position = "none",
+    strip.text.x = element_text(size = 12, face = "bold", colour = "black")) 
+
+meanboxtest
+  fig_num <-  run_autonum(seq_id = "Figure", pre_label = "Figure ", bkm_all = paste0("meanboxplot_", i_sp))
+  block_caption(label = paste0(paste0("Distribution of ", i, " flight heights from the mean bootstrapped estimates between March 2019 and February 2021. The mean of the population for each distribution is indicated by the black dot, and the middle line represents the median. The grey boxes represent the middle 50% of the data. The dotted lines indicate the minimum and maximum rotor heights of both wind turbine scenarios.")), 
+                style = "caption", autonum = fig_num)
+  ```

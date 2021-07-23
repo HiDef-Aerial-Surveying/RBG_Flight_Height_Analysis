@@ -1,0 +1,424 @@
+---
+title:
+author:
+output:
+  officedown::rdocx_document:
+    reference_docx: report_template.docx
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow")
+```
+
+```{r source, warning = FALSE, include = FALSE}
+source("Code/helper.scripts/Bootstrap_method_helpers_KK.R", local = knitr::knit_global())
+source("Code/config_markdown.R", local = knitr::knit_global())
+'%!in%' <- function(x,y)!('%in%'(x,y))
+```
+
+```{r packages, warning = FALSE, include = FALSE}
+lib_list <- c("readxl","foreach","gridExtra","ggpubr","rayshader","viridis","raster",
+              "gstat","rgdal","sp","spatialEco","HTSSIP","hablar",
+              "data.table","tidyverse","boot","GPArotation","psych","cowplot",
+              "pander", "flextable", "officer", "officedown", "knitr", "ggthemes")
+
+
+Load_Libs(lib_list)
+```
+
+```{r speclist, warning = FALSE, include = FALSE}
+SPP <- tolower(c("gannet", "great black-backed gull", "herring gull", "kittiwake", "lesser black-backed gull"))
+```
+
+```{r import data, warning = FALSE, include = FALSE}
+# bootstrapped flight heights
+reflist <- list.files(fh.dat, full.names = TRUE)
+
+SppDat <- data.table::rbindlist(lapply(reflist,function(x){
+                        tt <- readxl::read_xlsx(x,sheet="Sheet1")
+                        tt <- tt[,-7] # remove the time column which seems to be problematic in galloper zone80
+                        
+                        tt <- if(dim(tt)[1] > 0){
+                          tt$surv <- grep(unlist(strsplit(x,"_")),
+                                        pattern="S\\d",value = T) # this extracts survey number
+                          return(tt)
+                          }
+                        }),
+                      use.names=TRUE,fill=TRUE)
+
+SppDat <- SppDat[order(SppDat$`Survey Date`),]
+
+SppDat$month <- factor(SppDat$month, levels = c("March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"))
+
+# This creates column to split between years 1 and 2 if needed. 
+SppDat$yr <- "Year 1"
+
+SppDat$yr[as.Date(SppDat$`Survey Date`) %!in% Date1:Date2] <- "Year 2"
+
+SppDat$mnsurv <- paste(SppDat$month, SppDat$surv, sep = " ")
+
+SppDat$mnsurv[SppDat$mnsurv == "September S01"] <- "September"
+SppDat$mnsurv[SppDat$mnsurv == "October S01"] <- "October"
+SppDat$mnsurv[SppDat$mnsurv == "November S01"] <- "November"
+SppDat$mnsurv[SppDat$mnsurv == "December S01"] <- "December"
+SppDat$mnsurv[SppDat$mnsurv == "January S01"] <- "January"
+SppDat$mnsurv[SppDat$mnsurv == "February S01"] <- "February"
+
+SppDat$mnsurv <- factor(SppDat$mnsurv, levels = c("March S01", "March S02", "April S01", "April S02", "May S01", "May S02", "June S01", "June S02", "July S01", "July S02", "August S01", "August S02", "September", "October", "November", "December", "January", "February"))
+
+```
+
+```{r import measure data, warning = FALSE, include = FALSE}
+# all data
+measurelist <- list.files(m.dat, full.names = TRUE)
+
+MeasureDat <- rbindlist(lapply(measurelist, function(x){
+                      tt <- readxl::read_xlsx(x,sheet="Sheet1")
+                      tt <- tt[,-7] # remove the time column which seems to be problematic in galloper zone80
+                      tt <- if(dim(tt)[1] > 0){
+                        tt$surv <- grep(unlist(strsplit(x,"_")),
+                                        pattern="S\\d",value = T) # this extracts survey number
+                        return(tt)
+                      }
+                      }),
+                        use.names = TRUE, fill = TRUE)
+
+MeasureDat <- MeasureDat[order(MeasureDat$`Survey Date`),]
+
+MeasureDat <- MeasureDat %>% dplyr::filter(!is.na(`Frame 1 lengths in R`))
+
+# This creates column to split between years 1 and 2 if needed. 
+MeasureDat$yr <- "Year 1"
+
+MeasureDat$yr[as.Date(MeasureDat$`Survey Date`) %!in% Date1:Date2] <- "Year 2"
+
+load(file = "Code/outputs/Dat.reflect")
+reflectcount <- Dat.reflect %>% group_by(Species) %>% count()
+```
+
+```{r shapefile, warning = FALSE, include = FALSE}
+shapearea <- raster::shapefile(boundary)
+shapearea <- spTransform(shapearea,WGS84)
+shapefileDF <- fortify(shapearea)
+e <- extent(shapearea)
+# coerce to a SpatialPolygons object
+p <- as(e, 'SpatialPolygons')  
+proj4string(p) <- sf::st_crs(4326)$proj4string
+
+```
+
+```{r wide to long format, warning = FALSE, include = FALSE}
+all.frame <- SppDat %>% dplyr::select(Species,lwheight,mdheight,hiheight,month, surv, year, yr)
+
+## Gathers the frame into LONG format for plotting
+all.frame <- gather(all.frame,category,out,lwheight:hiheight)
+all.frame$category <- plyr::revalue(all.frame$category,c("lwheight"="Low",
+                                                         "mdheight"="Mean",
+                                                         'hiheight'="High"))
+
+all.frame$category <- factor(all.frame$category, levels=c("Low","Mean","High"))
+
+all.frame$yr <- factor(all.frame$yr, levels = c("Year 1", "Year 2"))
+
+all.frame$month <- factor(all.frame$month, levels = c("March", "April", "May", "June", "July", "August", "September", "October", "November", "December", "January", "February"))
+
+# We are 
+all.frame$mnsurv <- paste(all.frame$month, all.frame$surv, sep = " ")
+
+all.frame$mnsurv[all.frame$mnsurv == "September S01"] <- "September"
+all.frame$mnsurv[all.frame$mnsurv == "October S01"] <- "October"
+all.frame$mnsurv[all.frame$mnsurv == "November S01"] <- "November"
+all.frame$mnsurv[all.frame$mnsurv == "December S01"] <- "December"
+all.frame$mnsurv[all.frame$mnsurv == "January S01"] <- "January"
+all.frame$mnsurv[all.frame$mnsurv == "February S01"] <- "February"
+
+all.frame$mnsurv <- factor(all.frame$mnsurv, levels = c("March S01", "March S02", "April S01", "April S02", "May S01", "May S02", "June S01", "June S02", "July S01", "July S02", "August S01", "August S02", "September", "October", "November", "December", "January", "February"))
+
+```
+
+```{r survnums, warning = FALSE, include = FALSE}
+ source("Code/survey_nums.R", local = knitr::knit_global())
+```
+
+```{r for loops, warning = FALSE, include = FALSE}
+yrs <- c("Year 1", "Year 2")
+#locs <- c("SG2", "SG3") # for seagreen only
+```
+
+\allsectionsfont{\centering}
+\subsectionfont{\raggedright}
+\subsubsectionfont{\raggedright}
+
+<!-- This will make up the first page -->
+<!-- The vspace function will say how much space to leave from the previous entry -->
+<!-- In this case vspace of 3cm means 3cm from the top of the page.  -->
+
+Digital video aerial surveys of seabirds at Galloper Extension:
+
+March 2019 to February 2021
+
+Flight height analysis
+
+\nextpage
+
+# Results
+
+## Survey effort
+
+## Flying birds
+
+  The total number of flying birds measured within the survey area and those taken forward for flight height estimation are presented in Tables `r run_reference("m_v_e_kittiwake1")` - `r run_reference("m_v_e_herring_gull2")`. A minimum number of 25 reflections is deemed suitable to run flight height analysis. The current sample size of reflection data for each equivalent species is presented alongside. 
+Any differences in the total number of birds measured and those presented in results will be due to removal of outlier values during the analysis process. 
+
+```{r kitti, include = FALSE}
+i <- "kittiwake"
+
+```
+### Kittiwake
+
+```{r kitti table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r gan, include = FALSE}
+i <- "gannet"
+```
+### Gannet
+
+```{r gannet table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r lbbg, include = FALSE}
+i <- "lesser black-backed gull"
+```
+### Lesser black-backed gull
+
+```{r lbbg table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r gbbg, include = FALSE}
+i <- "great black-backed gull"
+```
+### Great black-backed gull
+
+```{r gbbg table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+```{r hg, include = FALSE}
+i <- "herring gull"
+```
+### Herring gull
+
+```{r lbbg table print, child = "Tables_Figures/Table_measured_vs_estimated.Rmd", warning = FALSE}
+```
+
+\newpage
+
+## Flight Height
+
+  Estimates of mean flight height for the minimum, mean and maximum flight height scenarios are presented for each species in Tables `r run_reference("pch_kittiwake1")` - `r run_reference("pch_herring_gull2")`. The estimate of the proportion of birds at PCH for each scenario is based on the number of individual birds whose mean flight height fell within the rotor swept area.
+
+  The distribution of these heights are presented as box plots for each species in Figures `r run_reference("mainboxplot_kittiwake1")`, `r run_reference("mainboxplot_kittiwake2")`, `r run_reference("mainboxplot_gannet1")`, `r run_reference("mainboxplot_gannet2")`, `r run_reference("mainboxplot_lesser_black-backed_gull1")`, `r run_reference("mainboxplot_lesser_black-backed_gull2")`, `r run_reference("mainboxplot_great_black-backed_gull1")`, `r run_reference("mainboxplot_great_black-backed_gull2")`, `r run_reference("mainboxplot_herring_gull1")`, `r run_reference("mainboxplot_herring_gull2")`. The grey boxes represent the middle 50% of the estimated flight heights for each scenario, and the mean of the population is indicated by the black dot. The distributions of flight height are also represented in ordered dot plots in Figures `r run_reference("Datplot_kittiwake1")`, `r run_reference("Datplot_kittiwake2")`, `r run_reference("Datplot_gannet1")`, `r run_reference("Datplot_gannet2")`, `r run_reference("Datplot_lesser_black-backed_gull1")`, `r run_reference("Datplot_lesser_black-backed_gull2")`, `r run_reference("Datplot_great_black-backed_gull1")`, `r run_reference("Datplot_great_black-backed_gull2")`, `r run_reference("Datplot_herring_gull1")` and `r run_reference("Datplot_herring_gull2")`.
+
+  The spatial variation in flight heights are represented in Figures `r run_reference("spatialplot_kittiwake1")`, `r run_reference("spatialplot_kittiwake2")`, `r run_reference("spatialplot_gannet1")`, `r run_reference("spatialplot_gannet2")`, `r run_reference("spatialplot_lesser_black-backed_gull1")`, `r run_reference("spatialplot_lesser_black-backed_gull2")`, `r run_reference("spatialplot_great_black-backed_gull1")`, `r run_reference("spatialplot_great_black-backed_gull2")`, `r run_reference("spatialplot_herring_gull1")` and `r run_reference("spatialplot_herring_gull2")`.
+
+  All but one of the mean heights for either of the two species ranged below `r turbine.high`m (the maximum rotor height of the smallest turbine specification). As such, the estimated proportions of birds at PCH for the smallest and largest wind turbine scenarios are identical with the exception of the maximum July flight height for gannets.
+
+<!---BLOCK_LANDSCAPE_START--->
+### Kittiwake
+```{r k, include = FALSE}
+i <- "kittiwake"
+```
+#### Proportion of birds at PCH
+```{r kitti pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+\newpage
+
+#### Flight height ranges
+ 
+  For interpretation of the following graphs, see Section 3.2. 
+
+
+```{r kitti_boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r kitti blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+
+```{r k12, include = FALSE}
+
+k <- 1
+```
+
+```{r kitti spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+```{r k22, include = FALSE}
+k <- 2
+```
+
+```{r kitti spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+```{r kitti spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+<!---BLOCK_LANDSCAPE_STOP--->
+
+
+
+<!---BLOCK_LANDSCAPE_START--->
+### Gannet
+```{r g, include = FALSE}
+i <- "gannet"
+```
+#### Proportion of birds at PCH
+```{r gannet pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r gannet boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r gannet blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+
+```{r g12, include = FALSE}
+k <- 1
+```
+
+```{r gannet spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+```{r g22, include = FALSE}
+k <- 2
+```
+
+```{r gannet spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+<!---BLOCK_LANDSCAPE_STOP--->
+
+
+<!---BLOCK_LANDSCAPE_START--->
+### Lesser black-backed gull
+```{r l, include = FALSE}
+i <- "lesser black-backed gull"
+```
+#### Proportion of birds at PCH
+```{r lbbg pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+
+
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r lbbg boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r lbbg blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+
+```{r lbbg12, include = FALSE}
+k <- 1
+```
+
+```{r lbbg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+```{r lbbg22, include = FALSE}
+k <- 2
+```
+
+```{r lbbg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+<!---BLOCK_LANDSCAPE_STOP--->
+
+<!---BLOCK_LANDSCAPE_START--->
+
+### Great black-backed gull
+```{r gb, include = FALSE}
+i <- "great black-backed gull"
+```
+#### Proportion of birds at PCH
+```{r gbbg pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r gbbg boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r gbbg blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+
+```{r gbbg12, include = FALSE}
+k <- 1
+```
+
+```{r gbbg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+```{r gbbg22, include = FALSE}
+k <- 2
+```
+
+```{r gbbg spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+
+<!---BLOCK_LANDSCAPE_STOP--->
+
+<!---BLOCK_LANDSCAPE_START--->
+
+### Herring gull
+
+```{r h, include = FALSE}
+i <- "herring gull"
+```
+#### Proportion of birds at PCH
+```{r herring pch table print, child = "Tables_Figures/Table_PCH.Rmd", warning = FALSE}
+```
+#### Flight height ranges
+
+  For interpretation of the following graphs, see Section 3.2. 
+
+```{r herring boxplot, child = "Tables_Figures/Boxplots.Rmd", warning = FALSE}
+```
+
+```{r herring blueplot, child = "Tables_Figures/Blue_plot.Rmd", warning = FALSE}
+```
+#### Spatial variation in flight height
+
+```{r herring12, include = FALSE}
+k <- 1
+```
+
+```{r herring spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+```{r herring22, include = FALSE}
+k <- 2
+```
+
+```{r herring spatial, child = "Tables_Figures/Spatial_plots.Rmd", warning = FALSE, echo = FALSE, message = FALSE}
+```
+
+<!---BLOCK_LANDSCAPE_STOP--->

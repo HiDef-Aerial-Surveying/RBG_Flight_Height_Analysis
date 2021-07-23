@@ -1,0 +1,71 @@
+---
+title: "child_table_estimated_measured"
+author: "Katharine Keogan"
+date: "06/04/2021"
+---
+
+
+```{r prepare data, warning = FALSE, echo = FALSE, message = FALSE, results = "asis"}
+# Table - measured versus estimated + reflection --------------------------
+
+ for(k in 1:2){
+
+MeasureDat1 <- MeasureDat %>% filter(yr == yrs[k])
+SppDat1 <- SppDat %>% filter(yr == yrs[k])
+
+MeasureDat1 %>% nest(-Species, -month, -surv, -year, -yr) -> aa
+
+SppDat1 %>% nest(-Species, -month, -surv, -year, -yr) -> bb
+
+cc <- full_join(aa, bb, by = c("Species", "month", "surv", "year", "yr"))
+cc <- inner_join(cc, reflectcount, by = "Species") # add the number of reflected birds
+
+cc$data.x <- unlist(lapply(cc$data.x, nrow))
+
+# This row is needed in cases where none of the measured birds could have FH estimated
+for (l in 1:dim(cc)[1]){
+cc$data.y1[l] <- unlist(ifelse(is.null(cc$data.y[[l]]), 0, nrow(cc$data.y[[l]])))
+}
+
+cc$data.y <- cc$data.y1
+cc$percm <- round(cc$data.y/cc$data.x*100, 1)
+
+cc <- cc[,c(1,2,3,4,6,7,10,8,5)]
+#cc$enough <- ifelse(cc[,8] > 24, "Yes", "No")
+
+cc <- as.data.table(cc)
+cc$month <- paste(cc$month, cc$year, sep = " ")
+cc <- subset(cc, select = -year)
+
+names(cc) <- c("Species", "month","survey", "measured", "estimated", "percm", "n", "year") #, "enough")
+
+data.table <- as.data.frame(cc)
+
+names(data.table) <- c("Species", "Month", "Survey", "Measured birds", "Est FH", "% estimated", "Reflection n", "Year") #, "Sufficient?")
+
+if(length(unique(data.table$Survey)) == 1){
+  data.table <- subset(data.table, select = -Survey)
+}
+
+caption_table <- paste0("Total number of flying ", i, " measured and with flight height estimated within the survey area in year ", yrs[k], ".")
+
+i_sp <- gsub(" ", "_", i)
+
+ft <- data.table %>% filter(Species == i) %>% select(-c("Species", "Year"))
+
+cat(knit_print(flextable(ft) %>% 
+  bold(i = 1, part = "header") %>% 
+  bg(i = 1, part = "header", bg = "grey") %>%
+  border_outer(part="all", border = fp_border(color="black", width = 1.5) ) %>% 
+  border_inner_h(part="all", border = fp_border(color="gray", width = 1)) %>% 
+  border_inner_v(part="all", border = fp_border(color="gray", width = 1)) %>%
+  fontsize(size = 10, part = "body") %>%
+  font(fontname = "Gill Sans MT", part = "all") %>%
+  set_table_properties(layout = "autofit", width = .8) %>%
+  set_caption(caption = paste0("Total number of flying ", i, " measured and estimated within the survey area in year ", k, "."), 
+                      style = "Table Caption",
+                      autonum = run_autonum(seq_id = "tab", bkm = paste0("m_v_e_",i_sp, k)))))
+
+ }
+
+```

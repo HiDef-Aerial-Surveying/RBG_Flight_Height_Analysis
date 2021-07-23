@@ -46,102 +46,26 @@ get.line.points <- function(FrameDat,Frame){
 
 
 get.indices <- function(L.MATRIX,p1,p2){
-  
-  ### When the line is exactly diagonal across the matrix, 
-  ### rowdiffs and coldiffs cannot be calculated. To account for this
-  ### you make use of the 0s to calculate the differences. A matrix has a line
-  ### directly through the diagonal if the matrix dimensions are the same
-  
-  ### So if the matrix dimensions are NOT equal, then change 0s to NAs
-  
-  if(dim(L.MATRIX)[1]!=dim(L.MATRIX)[2]){
-    L.MATRIX[L.MATRIX==0] <- NA
-  }
-  
-  ### Calculate the differences across each of the rows from left to right
-  ### Then from right to left, and then up and down the columns
-  ### These are done with foreach loops
-  
-  rowdiffs <- foreach(i=1:nrow(L.MATRIX),.combine='rbind')%do%{
-    xo <- abs(diff(L.MATRIX[i,]))
-    ### Have to add NA columns to account for the fact that the diff() function
-    ### will only return a vector that is n-1 in length. 
-    ### Adding the NA on the left side here, but in the inverse (revrowdiffs)
-    ### we add the NA to the right side.  Similar concept applies to the column
-    ### differences
-    xo <- c(NA,xo)
-    return(t(xo))
-  }
-  
-  
-  revrowdiffs <- foreach(i=1:nrow(L.MATRIX),.combine='rbind')%do%{
-    xo <- abs(diff(rev(L.MATRIX[i,])))
-    xo <- c(xo,NA)
-    return(rev(xo))
-  }
-  
-  
-  
-  coldiffs <- foreach(i=1:ncol(L.MATRIX),.combine="cbind")%do%{
-    xo <- abs(diff(L.MATRIX[,i]))
-    xo <- c(xo,NA)
-    return(xo)
-  }
-  
-  
-  
-  revcoldiffs <- foreach(i=1:ncol(L.MATRIX),.combine="cbind")%do%{
-    xo <- abs(diff(rev(L.MATRIX[,i])))
-    xo <- c(NA,xo)
-    return(rev(xo))
-  }
-  
-  
-  
-  ### To account for extra values in a situation where the line is perfectly 
-  ### diagonal, we replace all the values around the line with NAs
-  
-  if(dim(L.MATRIX)[1]==dim(L.MATRIX)[2]){
-    rowdiffs[L.MATRIX == 0] <- NA
-    revrowdiffs[L.MATRIX == 0] <- NA
-    coldiffs[L.MATRIX == 0] <- NA
-    revcoldiffs[L.MATRIX == 0] <- NA
-  }
-  
-  
-  ### Convert to matrices so they can be vectorized and searched for the appropriate
-  ### indices
-  rowdiffs <- as.matrix(rowdiffs)
-  revrowdiffs <- as.matrix(revrowdiffs)
-  coldiffs <- as.matrix(coldiffs)
-  revcoldiffs <- as.matrix(revcoldiffs)
-  
-  
-  ### Combine the above matrices into vectors so the quantiles can be calculated
-  combinedvector <- c(c(rowdiffs),c(revrowdiffs),c(coldiffs),c(revcoldiffs))
-  combinedvector <- combinedvector[combinedvector > 0]
-  combinedvector <- combinedvector[!is.na(combinedvector)]
-  
-  
-  ### Return the 50th percentile (those data that lie in between the 25th and 75th percentile of the data)
-  ### and find the indices in each of the matrices that meet these criteria
-  indvals <- foreach(i=list(rowdiffs,revrowdiffs,coldiffs,revcoldiffs),.combine='rbind')%do%{
-    return(which(i <= quantile(combinedvector,na.rm=T)[4] & i >= quantile(combinedvector,na.rm=T)[2] ,arr.ind=TRUE))
+  mat.orig <- L.MATRIX
+  L.MATRIX[L.MATRIX == 0] <- NA
+  newMat <- round(BBmisc::normalize(c(L.MATRIX),method = "range",range = c(0,1)),3)
+  newMat <- matrix(newMat,nrow=nrow(mat.orig),ncol=ncol(mat.orig))
+  indvals <- which(newMat >= 0.2 & newMat <= 0.4,arr.ind = TRUE)
+  if(length(indvals)==0){
+    indvals <- which(newMat >= 0.15 & newMat <= 0.5,arr.ind = TRUE)
   }
   
   ### Some of the indices will be the same, so make sure to only get the distinct values
-  INDICES <- data.frame(indvals) %>% distinct()
+  INDICES <- data.frame(indvals)
   
   ### This calculates the indices in reference to the image by using the extreme
   ### head and tail points calculated by the getlinepoints function.
   newINDICES <- foreach(i=1:nrow(INDICES),.combine='rbind') %do% {
-    newY <- max(p2[2],p1[2]) - INDICES[i,"row"]
-    newX <- max(p2[1],p1[1]) - INDICES[i,"col"]
+    newY <- min(p2[2],p1[2]) + (INDICES[i,"col"] - 1)
+    newX <- min(p2[1],p1[1]) + (INDICES[i,"row"] - 1)
     return(data.frame(row=newY,col=newX))
   }
-  
   return(newINDICES)
-  
 }
 
 

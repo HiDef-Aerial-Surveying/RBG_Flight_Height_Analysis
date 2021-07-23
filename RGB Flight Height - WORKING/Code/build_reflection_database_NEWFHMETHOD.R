@@ -130,8 +130,12 @@
 
 ### This builds the reflection data
   
-  Dat.reflect <- foreach(i=1:nrow(reflect_data),.combine="rbind")%do%{
-
+  library(doParallel)
+  cl <- makeCluster((parallel::detectCores() - 2)) 
+  registerDoParallel()
+  
+  
+  Dat.reflect <- foreach(i=1:nrow(reflect_data),.combine="rbind",.packages = c("foreach","tibble"),.verbose=T)%dopar%{
     testdat <- reflect_data[i,]
     if(!is.null(testdat$Frame.Data[[1]])){
       cat(paste0(i,'\n'))
